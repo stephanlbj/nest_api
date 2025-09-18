@@ -31,7 +31,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{secrets.AWS_REGION}}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -43,20 +43,21 @@ jobs:
           if [[ "${GITHUB_REF}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
             echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_STAGING }}" >> $GITHUB_ENV
-            echo "ECR_REPO=my-nest-app-staging" >> $GITHUB_ENV
+            echo "ECR_REPO=myprojet/nest_api_staging" >> $GITHUB_ENV
           elif [[ "${GITHUB_REF}" == "refs/heads/preprod" ]]; then
             echo "ENV=preprod" >> $GITHUB_ENV
             echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PREPROD }}" >> $GITHUB_ENV
-            echo "ECR_REPO=my-nest-app-preprod" >> $GITHUB_ENV
+            echo "ECR_REPO=myprojet/nest_api_preprod" >> $GITHUB_ENV
           elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
             echo "ENV=prod" >> $GITHUB_ENV
             echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PROD }}" >> $GITHUB_ENV
-            echo "ECR_REPO=my-nest-app-prod" >> $GITHUB_ENV
+            echo "ECR_REPO=myprojet/nest_api_prod" >> $GITHUB_ENV
           fi
 
       - name: Build, tag, and push image to ECR
         run: |
-          IMAGE_TAG=$(date +%Y%m%d%H%M%S)
+          # Utilise le short SHA du commit comme tag
+          IMAGE_TAG=$(git rev-parse --short HEAD)
 
           echo "🐳 Building Docker image for $ENV..."
           docker build -t $ECR_REPO:$IMAGE_TAG .
@@ -69,11 +70,10 @@ jobs:
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
 
-      - name: Deploy to ECS
-        run: |
-          echo "🚀 Updating ECS service: $ECS_SERVICE in cluster ${{ secrets.ECS_CLUSTER }}"
-
-          aws ecs update-service \
-            --cluster ${{ secrets.ECS_CLUSTER }} \
-            --service $ECS_SERVICE \
-            --force-new-deployment
+      # - name: Deploy to ECS
+      #   run: |
+      #     echo "🚀 Updating ECS service: $ECS_SERVICE in cluster ${{ secrets.ECS_CLUSTER }}"
+      #     aws ecs update-service \
+      #       --cluster ${{ secrets.ECS_CLUSTER }} \
+      #       --service $ECS_SERVICE \
+      #       --force-new-deployment
