@@ -1,0 +1,79 @@
+name: Deploy NestJS App to ECS
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - preprod
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set environment variables
+        id: vars
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/staging" ]]; then
+            echo "ENV=staging" >> $GITHUB_ENV
+            echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_STAGING }}" >> $GITHUB_ENV
+            echo "ECR_REPO=my-nest-app-staging" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF}" == "refs/heads/preprod" ]]; then
+            echo "ENV=preprod" >> $GITHUB_ENV
+            echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PREPROD }}" >> $GITHUB_ENV
+            echo "ECR_REPO=my-nest-app-preprod" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "ENV=prod" >> $GITHUB_ENV
+            echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PROD }}" >> $GITHUB_ENV
+            echo "ECR_REPO=my-nest-app-prod" >> $GITHUB_ENV
+          fi
+
+      - name: Build, tag, and push image to ECR
+        run: |
+          IMAGE_TAG=$(date +%Y%m%d%H%M%S)
+
+          echo "🐳 Building Docker image for $ENV..."
+          docker build -t $ECR_REPO:$IMAGE_TAG .
+
+          echo "🏷️ Tagging for ECR..."
+          docker tag $ECR_REPO:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
+          docker tag $ECR_REPO:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
+
+          echo "📤 Pushing to ECR..."
+          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
+          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
+
+      - name: Deploy to ECS
+        run: |
+          echo "🚀 Updating ECS service: $ECS_SERVICE in cluster ${{ secrets.ECS_CLUSTER }}"
+
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service $ECS_SERVICE \
+            --force-new-deployment
