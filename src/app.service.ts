@@ -1,5 +1,6 @@
 // app.service.ts
 import { Injectable } from '@nestjs/common';
+import { users } from './constants/userList';
 
 export interface User {
   id: number;
@@ -14,10 +15,7 @@ export interface HealthStatus {
 @Injectable()
 export class AppService {
   getUsers(): User[] {
-    return [
-      { id: 1, name: 'Alice' },
-      { id: 2, name: 'Bob' },
-    ];
+    return users;
   }
 
   getHealth(): HealthStatus {
