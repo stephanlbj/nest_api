@@ -23,8 +23,4 @@ export class AppService {
   getHealth(): HealthStatus {
     return { status: 'ok', timestamp: new Date().toISOString() };
   }
-
-  getHello(): string {
-    return 'Hello World!';
-  }
 }
