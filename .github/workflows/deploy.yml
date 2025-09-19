@@ -6,6 +6,17 @@ on:
       - main
       - staging
       - preprod
+  workflow_dispatch: # ✅ déclenchement manuel
+    inputs:
+      environment:
+        description: 'Environnement cible (staging | preprod | prod)'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - preprod
+          - prod
 
 jobs:
   build-and-deploy:
@@ -31,7 +42,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{secrets.AWS_REGION}}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -40,23 +51,33 @@ jobs:
       - name: Set environment variables
         id: vars
         run: |
-          if [[ "${GITHUB_REF}" == "refs/heads/staging" ]]; then
-            echo "ENV=staging" >> $GITHUB_ENV
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            ENV="${{ github.event.inputs.environment }}"
+          else
+            if [[ "${GITHUB_REF}" == "refs/heads/staging" ]]; then
+              ENV="staging"
+            elif [[ "${GITHUB_REF}" == "refs/heads/preprod" ]]; then
+              ENV="preprod"
+            elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+              ENV="prod"
+            fi
+          fi
+
+          echo "ENV=$ENV" >> $GITHUB_ENV
+
+          if [[ "$ENV" == "staging" ]]; then
             echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_STAGING }}" >> $GITHUB_ENV
             echo "ECR_REPO=myprojet/nest_api_staging" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF}" == "refs/heads/preprod" ]]; then
-            echo "ENV=preprod" >> $GITHUB_ENV
+          elif [[ "$ENV" == "preprod" ]]; then
             echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PREPROD }}" >> $GITHUB_ENV
             echo "ECR_REPO=myprojet/nest_api_preprod" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            echo "ENV=prod" >> $GITHUB_ENV
+          elif [[ "$ENV" == "prod" ]]; then
             echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PROD }}" >> $GITHUB_ENV
             echo "ECR_REPO=myprojet/nest_api_prod" >> $GITHUB_ENV
           fi
 
       - name: Build, tag, and push image to ECR
         run: |
-          # Utilise le short SHA du commit comme tag
           IMAGE_TAG=$(git rev-parse --short HEAD)
 
           echo "🐳 Building Docker image for $ENV..."
