@@ -74,6 +74,7 @@ jobs:
           elif [[ "$ENV" == "prod" ]]; then
             echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PROD }}" >> $GITHUB_ENV
             echo "ECR_REPO=myprojet/nest_api_prod" >> $GITHUB_ENV
+          fi
 
       - name: Ensure ECR repository exists
         run: |
