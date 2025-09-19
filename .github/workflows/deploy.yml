@@ -65,7 +65,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.5.6 # ou la version que tu utilises
+          terraform_version: 1.5.6
 
       # 9️⃣ Set environment
       - name: Set environment
@@ -88,13 +88,10 @@ jobs:
         working-directory: terraform
         run: terraform init
 
-      # 1️⃣1️⃣ Terraform apply (ECR, ECS, etc.)
+      # 1️⃣1️⃣ Terraform apply
       - name: Terraform Apply
         working-directory: terraform
-        run: terraform apply -auto-approve \
-          -var="aws_region=${{ secrets.AWS_REGION }}" \
-          -var="ecr_name=nest_api_${{ env.ENV }}" \
-          -var="environment=${{ env.ENV }}"
+        run: terraform apply -auto-approve -var="aws_region=${{ secrets.AWS_REGION }}" -var="ecr_name=nest_api_${{ env.ENV }}" -var="environment=${{ env.ENV }}"
 
       # 1️⃣2️⃣ Get ECR repository URL from Terraform
       - name: Get ECR URL
@@ -114,7 +111,7 @@ jobs:
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
 
-      # 1️⃣4️⃣ Deploy ECS service (cluster + service from Terraform outputs)
+      # 1️⃣4️⃣ Deploy ECS service
       - name: Deploy to ECS
         working-directory: terraform
         run: |
