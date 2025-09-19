@@ -88,10 +88,10 @@ jobs:
         working-directory: terraform
         run: terraform init
 
-      # 1️⃣1️⃣ Terraform apply
+      # 1️⃣1️⃣ Terraform apply with tfvars
       - name: Terraform Apply
         working-directory: terraform
-        run: terraform apply -auto-approve -var="aws_region=${{ secrets.AWS_REGION }}" -var="ecr_name=nest_api_${{ env.ENV }}" -var="environment=${{ env.ENV }}"
+        run: terraform apply -auto-approve -var-file="envs/${{ env.ENV }}.tfvars"
 
       # 1️⃣2️⃣ Get ECR repository URL from Terraform
       - name: Get ECR URL
