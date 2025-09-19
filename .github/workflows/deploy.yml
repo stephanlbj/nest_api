@@ -6,7 +6,7 @@ on:
       - main
       - staging
       - preprod
-  workflow_dispatch: # ✅ déclenchement manuel
+  workflow_dispatch:
     inputs:
       environment:
         description: 'Environnement cible (staging | preprod | prod)'
@@ -23,20 +23,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      # 1️⃣ Checkout app code
+      - name: Checkout app code
         uses: actions/checkout@v4
 
+      # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
+      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: npm install
 
+      # 4️⃣ Build project
       - name: Build project
         run: npm run build
 
+      # 5️⃣ Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -44,62 +49,73 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # 6️⃣ Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set environment variables
-        id: vars
+      # 7️⃣ Checkout Terraform repo
+      - name: Checkout Terraform repo
+        uses: actions/checkout@v4
+        with:
+          repository: stephanlbj/ecsterraform
+          path: terraform
+
+      # 8️⃣ Set environment
+      - name: Set environment
+        id: env-vars
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             ENV="${{ github.event.inputs.environment }}"
           else
-            if [[ "${GITHUB_REF}" == "refs/heads/staging" ]]; then
-              ENV="staging"
-            elif [[ "${GITHUB_REF}" == "refs/heads/preprod" ]]; then
-              ENV="preprod"
-            elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-              ENV="prod"
-            fi
+            case "${GITHUB_REF}" in
+              "refs/heads/staging") ENV="staging" ;;
+              "refs/heads/preprod") ENV="preprod" ;;
+              "refs/heads/main") ENV="prod" ;;
+              *) ENV="staging" ;;
+            esac
           fi
-
           echo "ENV=$ENV" >> $GITHUB_ENV
 
-          if [[ "$ENV" == "staging" ]]; then
-            echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_STAGING }}" >> $GITHUB_ENV
-            echo "ECR_REPO=myprojet/nest_api_staging" >> $GITHUB_ENV
-          elif [[ "$ENV" == "preprod" ]]; then
-            echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PREPROD }}" >> $GITHUB_ENV
-            echo "ECR_REPO=myprojet/nest_api_preprod" >> $GITHUB_ENV
-          elif [[ "$ENV" == "prod" ]]; then
-            echo "ECS_SERVICE=${{ secrets.ECS_SERVICE_PROD }}" >> $GITHUB_ENV
-            echo "ECR_REPO=myprojet/nest_api_prod" >> $GITHUB_ENV
-          fi
+      # 9️⃣ Terraform init
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
 
-      - name: Ensure ECR repository exists
-        run: |
-          aws ecr describe-repositories --repository-names $ECR_REPO || \
-          aws ecr create-repository --repository-name $ECR_REPO
+      # 🔟 Terraform apply (ECR, ECS, etc.)
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve \
+          -var="aws_region=${{ secrets.AWS_REGION }}" \
+          -var="ecr_name=nest_api_${{ env.ENV }}" \
+          -var="environment=${{ env.ENV }}"
 
+      # 1️⃣1️⃣ Get ECR repository URL from Terraform
+      - name: Get ECR URL
+        id: ecr
+        working-directory: terraform
+        run: echo "ECR_REPO=$(terraform output -raw ecr_url)" >> $GITHUB_ENV
+
+      # 1️⃣2️⃣ Build, tag, and push Docker image
       - name: Build, tag, and push image to ECR
         run: |
           IMAGE_TAG=$(git rev-parse --short HEAD)
-
           echo "🐳 Building Docker image for $ENV..."
           docker build -t $ECR_REPO:$IMAGE_TAG .
-
-          echo "🏷️ Tagging for ECR..."
           docker tag $ECR_REPO:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
           docker tag $ECR_REPO:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
-
           echo "📤 Pushing to ECR..."
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
           docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
 
-      # - name: Deploy to ECS
-      #   run: |
-      #     echo "🚀 Updating ECS service: $ECS_SERVICE in cluster ${{ secrets.ECS_CLUSTER }}"
-      #     aws ecs update-service \
-      #       --cluster ${{ secrets.ECS_CLUSTER }} \
-      #       --service $ECS_SERVICE \
-      #       --force-new-deployment
+      # 1️⃣3️⃣ Deploy ECS service (cluster + service from Terraform outputs)
+      - name: Deploy to ECS
+        working-directory: terraform
+        run: |
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster)
+          SERVICE_NAME=$(terraform output -raw ecs_service)
+          echo "🚀 Updating ECS service: $SERVICE_NAME in cluster $CLUSTER_NAME"
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $SERVICE_NAME \
+            --force-new-deployment
