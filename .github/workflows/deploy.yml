@@ -52,7 +52,7 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo (pour récupérer outputs )
+      # 7️⃣ Checkout Terraform repo (pour récupérer outputs)
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
@@ -86,21 +86,26 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_TAG=$(git rev-parse --short HEAD)
-          ENV_TAG="${{ env.ENV }}-latest"
+          ENV_TAG="${ENV}-latest"
 
           echo "🐳 Building Docker image..."
-          docker build -t "${{ env.ECR_REPO }}:${IMAGE_TAG}" .
-          docker tag "${{ env.ECR_REPO }}:${IMAGE_TAG}" "${{ env.ECR_REPO }}:${ENV_TAG}"
+          docker build -t "${ECR_REPO}:${IMAGE_TAG}" .
+          docker tag "${ECR_REPO}:${IMAGE_TAG}" "${ECR_REPO}:${ENV_TAG}"
 
           echo "📤 Pushing Docker image to ECR..."
-          docker push "${{ env.ECR_REPO }}:${IMAGE_TAG}"
-          docker push "${{ env.ECR_REPO }}:${ENV_TAG}"
+          docker push "${ECR_REPO}:${IMAGE_TAG}"
+          docker push "${ECR_REPO}:${ENV_TAG}"
 
-          # Deploy ECS service
-          TASK_IMAGE="${{ env.TASK_DEF_IMAGE:-${{ env.ECR_REPO }}:${ENV_TAG}}}"
-          echo "🚀 Updating ECS service ${{ env.SERVICE_NAME }} in cluster ${{ env.CLUSTER_NAME }} with image $TASK_IMAGE"
+          # Déterminer l'image à déployer (utilise TASK_DEF_IMAGE si présent, sinon ECR_TAG)
+          if [ -z "$TASK_DEF_IMAGE" ]; then
+            TASK_IMAGE="${ECR_REPO}:${ENV_TAG}"
+          else
+            TASK_IMAGE="$TASK_DEF_IMAGE"
+          fi
+
+          echo "🚀 Updating ECS service $SERVICE_NAME in cluster $CLUSTER_NAME with image $TASK_IMAGE"
           aws ecs update-service \
-            --cluster "${{ env.CLUSTER_NAME }}" \
-            --service "${{ env.SERVICE_NAME }}" \
+            --cluster "$CLUSTER_NAME" \
+            --service "$SERVICE_NAME" \
             --force-new-deployment \
             --region ${{ secrets.AWS_REGION }}
