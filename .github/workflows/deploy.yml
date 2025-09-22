@@ -1,5 +1,9 @@
 name: Deploy NestJS App to ECS
 
+permissions:
+  id-token: write
+  contents: read
+
 on:
   push:
     branches:
@@ -41,19 +45,18 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # 5️⃣ Configure AWS credentials (via secrets IAM)
+      # 5️⃣ Configure AWS credentials via OIDC
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: arn:aws:iam::585665041354:role/GitHubActionsAppRole
+          aws-region: eu-north-1
 
       # 6️⃣ Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo
+      # 7️⃣ Checkout Terraform repo (pour récupérer outputs)
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
@@ -73,8 +76,6 @@ jobs:
         working-directory: terraform
         run: |
           set -euo pipefail
-
-          # Récupérer et vérifier l'environnement
           ENV="${{ github.event.inputs.environment }}"
           if [ -z "$ENV" ]; then
             echo "❌ Environment input is empty. Aborting."
@@ -82,16 +83,14 @@ jobs:
           fi
           echo "ENV=${ENV}" >> $GITHUB_ENV
 
-          # Terraform init avec le backend correct
           terraform init -backend-config="env/backend.${ENV}.tfvars"
 
-          # Récupérer les outputs Terraform
+          # Récupérer les outputs
           ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n')
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n')
           SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n')
           TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n')
 
-          # Export vers GitHub Actions
           echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
           echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
@@ -101,7 +100,6 @@ jobs:
       - name: Build, tag, push Docker image + Deploy ECS
         run: |
           set -euo pipefail
-
           IMAGE_TAG=$(git rev-parse --short HEAD)
           ENV_TAG="${{ env.ENV }}-latest"
           REPO="${{ env.ECR_REPO }}"
@@ -124,4 +122,4 @@ jobs:
             --cluster "$CLUSTER" \
             --service "$SERVICE" \
             --force-new-deployment \
-            --region ${{ secrets.AWS_REGION }}
+            --region eu-north-1
