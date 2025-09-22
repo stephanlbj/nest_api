@@ -91,7 +91,12 @@ jobs:
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-          # Extraction propre des outputs
+          # Extraction propre des outputs ici
+          RAW_REPO=$(terraform output -raw repository_url)
+          echo "📝 Terraform raw repository_url: $RAW_REPO"
+
+           
+
           ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n' | xargs)
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n' | xargs)
           SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n' | xargs)
