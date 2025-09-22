@@ -62,8 +62,8 @@ jobs:
 
           # URL ECR en dur (pour l’instant)
           REPO="585665041354.dkr.ecr.eu-north-1.amazonaws.com/nest-api-staging-repo"
-          CLUSTER="nest-api-cluster"   # Remplace par ton cluster ECS
-          SERVICE="nest-api-service"   # Remplace par ton service ECS
+          CLUSTER="nest-api-staging-cluster"   # Remplace par ton cluster ECS
+          SERVICE="nest-api-staging-service"   # Remplace par ton service ECS
 
           echo "🐳 Building Docker image..."
           docker build -t "${REPO}:${IMAGE_TAG}" .
