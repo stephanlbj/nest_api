@@ -96,22 +96,25 @@ jobs:
         run: |
           set -e
 
+          # Récupération des outputs Terraform
           ECR_REPO=$(terraform output -raw ecr_url 2>/dev/null || echo "")
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null || echo "")
           SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null || echo "")
           TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image 2>/dev/null || echo "")
 
+          # Vérification que les outputs existent
           if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
             echo "❌ Terraform outputs are empty. Aborting."
             exit 1
           fi
 
-          # Supprime les retours à la ligne et caractères spéciaux avant d'écrire dans GITHUB_ENV
+          # Nettoyage des retours à la ligne ou caractères spéciaux
           ECR_REPO_SAFE="${ECR_REPO//$'\n'/}"
           CLUSTER_NAME_SAFE="${CLUSTER_NAME//$'\n'/}"
           SERVICE_NAME_SAFE="${SERVICE_NAME//$'\n'/}"
           TASK_DEF_IMAGE_SAFE="${TASK_DEF_IMAGE//$'\n'/}"
 
+          # Export vers GitHub Actions
           echo "ECR_REPO=$ECR_REPO_SAFE" >> $GITHUB_ENV
           echo "CLUSTER_NAME=$CLUSTER_NAME_SAFE" >> $GITHUB_ENV
           echo "SERVICE_NAME=$SERVICE_NAME_SAFE" >> $GITHUB_ENV
