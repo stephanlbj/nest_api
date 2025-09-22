@@ -58,27 +58,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          ENV="${{ github.event.inputs.environment }}"
           IMAGE_TAG=$(git rev-parse --short HEAD || echo "latest")
-          ENV_TAG="${ENV}-latest"
 
-          # URL ECR en dur pour test
+          # URL ECR en dur (pour l’instant)
           REPO="585665041354.dkr.ecr.eu-north-1.amazonaws.com/nest-api-staging-repo"
-          CLUSTER="nest-api-cluster"       # Remplace par ton cluster ECS
-          SERVICE="nest-api-service"       # Remplace par ton service ECS
-          TASK_IMAGE=""                    # Laisse vide pour utiliser l'image qu'on push
+          CLUSTER="nest-api-cluster"   # Remplace par ton cluster ECS
+          SERVICE="nest-api-service"   # Remplace par ton service ECS
 
           echo "🐳 Building Docker image..."
           docker build -t "${REPO}:${IMAGE_TAG}" .
-          docker tag "${REPO}:${IMAGE_TAG}" "${REPO}:${ENV_TAG}"
+          docker tag "${REPO}:${IMAGE_TAG}" "${REPO}:latest"
 
           echo "📤 Pushing Docker image to ECR..."
           docker push "${REPO}:${IMAGE_TAG}"
-          docker push "${REPO}:${ENV_TAG}"
+          docker push "${REPO}:latest"
 
-          # Déploiement ECS
-          DEPLOY_IMAGE="${TASK_IMAGE:-${REPO}:${ENV_TAG}}"
-          echo "🚀 Updating ECS service $SERVICE in cluster $CLUSTER with image $DEPLOY_IMAGE"
+          echo "🚀 Updating ECS service $SERVICE in cluster $CLUSTER with new image"
           aws ecs update-service \
             --cluster "$CLUSTER" \
             --service "$SERVICE" \
