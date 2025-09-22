@@ -53,7 +53,7 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo (même branche que l'app)
+      # 7️⃣ Checkout Terraform repo
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
@@ -67,7 +67,7 @@ jobs:
         with:
           terraform_version: 1.5.7
 
-      # 9️⃣ Terraform apply + récupérer outputs
+      # 9️⃣ Terraform apply + outputs
       - name: Terraform apply and get outputs
         id: terraform-outputs
         working-directory: terraform
@@ -91,7 +91,7 @@ jobs:
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-          # Récupération propre des outputs Terraform
+          # Récupération sécurisée des outputs Terraform
           ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n ' | xargs)
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n ' | xargs)
           SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n ' | xargs)
@@ -109,7 +109,7 @@ jobs:
 
           echo "✅ Terraform outputs successfully retrieved."
 
-      # 🔟 Build, tag, push Docker image + déployer ECS
+      # 🔟 Build, tag, push Docker image + deploy ECS
       - name: Build, tag, push Docker image + Deploy ECS
         run: |
           set -euo pipefail
