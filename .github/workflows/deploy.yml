@@ -67,7 +67,7 @@ jobs:
         with:
           terraform_version: 1.5.7
 
-      # 9️⃣ Terraform apply + get clean outputs
+      # 9️⃣ Terraform apply + clean outputs
       - name: Terraform apply and get outputs
         id: terraform-outputs
         working-directory: terraform
@@ -91,12 +91,13 @@ jobs:
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-          # Extraction propre des outputs via JSON pour éviter les annotations
-          ECR_REPO=$(terraform output -json repository_url | jq -r '.')
-          CLUSTER_NAME=$(terraform output -json ecs_cluster_id | jq -r '.')
-          SERVICE_NAME=$(terraform output -json ecs_service_name | jq -r '.')
-          TASK_DEF_IMAGE=$(terraform output -json ecs_task_image | jq -r '.')
+          # Extraction propre des outputs
+          ECR_REPO=$(terraform output -raw repository_url 2>/dev/null | tail -n1 | tr -d '[:space:]')
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null | tail -n1 | tr -d '[:space:]')
+          SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null | tail -n1 | tr -d '[:space:]')
+          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image 2>/dev/null | tail -n1 | tr -d '[:space:]')
 
+          # Debug outputs
           echo "📝 Terraform outputs:"
           echo "ECR_REPO=$ECR_REPO"
           echo "CLUSTER_NAME=$CLUSTER_NAME"
@@ -109,10 +110,10 @@ jobs:
           fi
 
           # Export vers GitHub Actions
-          echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
-          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=${TASK_DEF_IMAGE}" >> $GITHUB_ENV
+          echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
+          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE" >> $GITHUB_ENV
 
           echo "✅ Terraform outputs successfully retrieved."
 
