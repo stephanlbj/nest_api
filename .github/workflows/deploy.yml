@@ -59,7 +59,7 @@ jobs:
           set -euo pipefail
 
           ENV="${{ github.event.inputs.environment }}"
-          IMAGE_TAG=$(git rev-parse --short HEAD)
+          IMAGE_TAG=$(git rev-parse --short HEAD || echo "latest")
           ENV_TAG="${ENV}-latest"
 
           # URL ECR en dur pour test
