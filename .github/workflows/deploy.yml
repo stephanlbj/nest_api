@@ -83,11 +83,11 @@ jobs:
           fi
           echo "ENV=$ENV" >> $GITHUB_ENV
 
-      # 🔟 Terraform init & apply
+      # 🔟 Terraform init & apply with backend config
       - name: Terraform Apply
         working-directory: terraform
         run: |
-          terraform init
+          terraform init -backend-config="envs/backend.${{ env.ENV }}.tfvars"
           terraform apply -auto-approve -var-file="envs/${{ env.ENV }}.tfvars"
 
       # 1️⃣1️⃣ Get Terraform outputs
@@ -111,10 +111,9 @@ jobs:
           docker push $ECR_REPO:$IMAGE_TAG
           docker push $ECR_REPO:$ENV_TAG
 
-      # 1️⃣3️⃣ Deploy ECS service
+      # 1️⃣3️⃣ Deploy ECS service with new image
       - name: Deploy to ECS
         run: |
-          # Utilise l'image existante de la task definition ou le nouvel image buildé
           TASK_IMAGE="${TASK_DEF_IMAGE:-$ECR_REPO:$ENV_TAG}"
           echo "🚀 Updating ECS service $SERVICE_NAME in cluster $CLUSTER_NAME with image $TASK_IMAGE"
           aws ecs update-service \
