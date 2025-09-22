@@ -87,8 +87,8 @@ jobs:
       - name: Terraform Apply
         working-directory: terraform
         run: |
-          terraform init -backend-config="envs/backend.${{ env.ENV }}.tfvars"
-          terraform apply -auto-approve -var-file="envs/${{ env.ENV }}.tfvars"
+          terraform init -backend-config="env/backend.${{ env.ENV }}.tfvars"
+          terraform apply -auto-approve -var-file="env/${{ env.ENV }}.tfvars"
 
       # 1️⃣1️⃣ Get Terraform outputs
       - name: Get Terraform outputs
