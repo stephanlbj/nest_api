@@ -53,12 +53,13 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo
+      # 7️⃣ Checkout Terraform repo (same branch as app)
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
           repository: stephanlbj/terraformdeploy1
           path: terraform
+          ref: ${{ github.ref_name }}
 
       # 8️⃣ Setup Terraform
       - name: Setup Terraform
@@ -73,10 +74,10 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             ENV="${{ github.event.inputs.environment }}"
           else
-            case "${GITHUB_REF}" in
-              "refs/heads/staging") ENV="staging" ;;
-              "refs/heads/preprod") ENV="preprod" ;;
-              "refs/heads/main") ENV="prod" ;;
+            case "${GITHUB_REF_NAME}" in
+              "staging") ENV="staging" ;;
+              "preprod") ENV="preprod" ;;
+              "main") ENV="prod" ;;
               *) ENV="staging" ;;
             esac
           fi
@@ -94,8 +95,6 @@ jobs:
         working-directory: terraform
         run: |
           set -e
-
-          # Correct outputs for ECR and ECS
           ECR_REPO=$(terraform output -raw repository_url 2>/dev/null || echo "")
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null || echo "")
           SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null || echo "")
@@ -106,13 +105,11 @@ jobs:
             exit 1
           fi
 
-          # Clean newlines / special characters
           ECR_REPO="${ECR_REPO//$'\n'/}"
           CLUSTER_NAME="${CLUSTER_NAME//$'\n'/}"
           SERVICE_NAME="${SERVICE_NAME//$'\n'/}"
           TASK_DEF_IMAGE="${TASK_DEF_IMAGE//$'\n'/}"
 
-          # Export to GitHub Actions environment
           echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
           echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
