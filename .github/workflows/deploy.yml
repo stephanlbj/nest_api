@@ -61,7 +61,13 @@ jobs:
           path: terraform
           ref: ${{ github.ref_name }}
 
-      # 8️⃣ Get Terraform outputs (no apply)
+      # 8️⃣ Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      # 9️⃣ Get Terraform outputs (no apply)
       - name: Get Terraform outputs
         id: terraform-outputs
         working-directory: terraform
@@ -83,7 +89,7 @@ jobs:
           echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
           echo "TASK_DEF_IMAGE=${TASK_DEF_IMAGE}" >> $GITHUB_ENV
 
-      # 9️⃣ Build, tag, push Docker image + Deploy ECS
+      # 🔟 Build, tag, push Docker image + Deploy ECS
       - name: Build, tag, push Docker image + Deploy ECS
         run: |
           set -euo pipefail
