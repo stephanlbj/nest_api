@@ -1,5 +1,9 @@
 name: Deploy NestJS App to ECS
 
+permissions:
+  id-token: write
+  contents: read
+
 on:
   push:
     branches:
