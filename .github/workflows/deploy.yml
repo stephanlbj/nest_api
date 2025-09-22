@@ -102,10 +102,11 @@ jobs:
             exit 1
           fi
 
-          echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
-          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=${TASK_DEF_IMAGE}" >> $GITHUB_ENV
+          # The issue is here: the `echo` commands that write to GITHUB_ENV must be on their own line
+          echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
+          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE" >> $GITHUB_ENV
 
           echo "✅ Terraform outputs successfully retrieved."
 
