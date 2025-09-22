@@ -91,11 +91,16 @@ jobs:
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-          # Récupération propre des outputs Terraform
-          ECR_REPO=$(terraform output -raw repository_url)
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id)
-          SERVICE_NAME=$(terraform output -raw ecs_service_name)
-          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image)
+          # Récupération propre des outputs Terraform en ignorant les messages de débogage
+          ECR_REPO=$(terraform output -raw repository_url 2>/dev/null)
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null)
+          SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null)
+          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image 2>/dev/null)
+
+          if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
+            echo "❌ Terraform outputs are empty. Aborting."
+            exit 1
+          fi
 
           echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
