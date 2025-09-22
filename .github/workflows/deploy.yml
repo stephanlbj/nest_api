@@ -91,22 +91,24 @@ jobs:
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-          # Récupération propre des outputs Terraform en ignorant les messages de débogage
-          ECR_REPO=$(terraform output -raw repository_url 2>/dev/null)
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null)
-          SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null)
-          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image 2>/dev/null)
+          # Récupération propre des outputs Terraform
+          # Supprime retours chariot, espaces et autres caractères invisibles
+          ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n ' | xargs)
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n ' | xargs)
+          SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n ' | xargs)
+          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n ' | xargs)
 
+          # Vérifier que les outputs sont valides
           if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
             echo "❌ Terraform outputs are empty. Aborting."
             exit 1
           fi
 
-          # The issue is here: the `echo` commands that write to GITHUB_ENV must be on their own line
-          echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
-          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE" >> $GITHUB_ENV
+          # Export vers GitHub Actions
+          echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
+          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
+          echo "TASK_DEF_IMAGE=${TASK_DEF_IMAGE}" >> $GITHUB_ENV
 
           echo "✅ Terraform outputs successfully retrieved."
 
@@ -116,7 +118,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Accéder aux variables d'environnement définies à l'étape précédente
           IMAGE_TAG=$(git rev-parse --short HEAD)
           ENV_TAG="${{ env.ENV }}-latest"
           ECR_REPO="${{ env.ECR_REPO }}"
