@@ -41,19 +41,18 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # 5️⃣ Configure AWS credentials
+      # 5️⃣ Configure AWS credentials via OIDC (pas de secrets stockés)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
       # 6️⃣ Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo
+      # 7️⃣ Checkout Terraform repo (pour récupérer outputs)
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
@@ -61,86 +60,47 @@ jobs:
           path: terraform
           ref: ${{ github.ref_name }}
 
-      # 8️⃣ Setup Terraform
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
-
-      # 9️⃣ Terraform apply + clean outputs
-      - name: Terraform apply and get outputs
+      # 8️⃣ Extract Terraform outputs (no apply)
+      - name: Get Terraform outputs
         id: terraform-outputs
         working-directory: terraform
         run: |
           set -euo pipefail
-
-          # Déterminer l'environnement
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            ENV="${{ github.event.inputs.environment }}"
-          else
-            case "${GITHUB_REF_NAME}" in
-              "staging") ENV="staging" ;;
-              "preprod") ENV="preprod" ;;
-              "main") ENV="prod" ;;
-              *) ENV="staging" ;;
-            esac
-          fi
+          ENV="${{ github.event.inputs.environment }}"
           echo "ENV=${ENV}" >> $GITHUB_ENV
 
-          # Terraform init & apply
+          # Terraform init + outputs
           terraform init -backend-config="env/backend.${ENV}.tfvars"
-          terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
+          ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n')
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n')
+          SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n')
+          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n')
 
-          # Extraction propre des outputs
-          ECR_REPO=$(terraform output -raw repository_url 2>/dev/null | tail -n1 | tr -d '[:space:]')
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null | tail -n1 | tr -d '[:space:]')
-          SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null | tail -n1 | tr -d '[:space:]')
-          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image 2>/dev/null | tail -n1 | tr -d '[:space:]')
+          echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
+          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
+          echo "TASK_DEF_IMAGE=${TASK_DEF_IMAGE}" >> $GITHUB_ENV
 
-          # Debug outputs
-          echo "📝 Terraform outputs:"
-          echo "ECR_REPO=$ECR_REPO"
-          echo "CLUSTER_NAME=$CLUSTER_NAME"
-          echo "SERVICE_NAME=$SERVICE_NAME"
-          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE"
-
-          if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
-            echo "❌ Terraform outputs are empty. Aborting."
-            exit 1
-          fi
-
-          # Export vers GitHub Actions
-          echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
-          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE" >> $GITHUB_ENV
-
-          echo "✅ Terraform outputs successfully retrieved."
-
-      # 🔟 Build, tag, push Docker image + Deploy ECS
+      # 9️⃣ Build, tag, push Docker image + Deploy ECS
       - name: Build, tag, push Docker image + Deploy ECS
         run: |
           set -euo pipefail
-
           IMAGE_TAG=$(git rev-parse --short HEAD)
           ENV_TAG="${{ env.ENV }}-latest"
-          ECR_REPO="${{ env.ECR_REPO }}"
-          CLUSTER_NAME="${{ env.CLUSTER_NAME }}"
-          SERVICE_NAME="${{ env.SERVICE_NAME }}"
-          TASK_DEF_IMAGE="${{ env.TASK_DEF_IMAGE }}"
 
-          echo "🐳 Building Docker image for ${{ env.ENV }}..."
-          docker build -t "${ECR_REPO}:${IMAGE_TAG}" .
-          docker tag "${ECR_REPO}:${IMAGE_TAG}" "${ECR_REPO}:${ENV_TAG}"
-          echo "📤 Pushing to ECR..."
-          docker push "${ECR_REPO}:${IMAGE_TAG}"
-          docker push "${ECR_REPO}:${ENV_TAG}"
+          echo "🐳 Building Docker image..."
+          docker build -t "${{ env.ECR_REPO }}:${IMAGE_TAG}" .
+          docker tag "${{ env.ECR_REPO }}:${IMAGE_TAG}" "${{ env.ECR_REPO }}:${ENV_TAG}"
+
+          echo "📤 Pushing Docker image to ECR..."
+          docker push "${{ env.ECR_REPO }}:${IMAGE_TAG}"
+          docker push "${{ env.ECR_REPO }}:${ENV_TAG}"
 
           # Deploy ECS service
-          TASK_IMAGE="${TASK_DEF_IMAGE:-$ECR_REPO:$ENV_TAG}"
-          echo "🚀 Updating ECS service $SERVICE_NAME in cluster $CLUSTER_NAME with image $TASK_IMAGE"
+          TASK_IMAGE="${{ env.TASK_DEF_IMAGE:-${{ env.ECR_REPO }}:${ENV_TAG}}}"
+          echo "🚀 Updating ECS service ${{ env.SERVICE_NAME }} in cluster ${{ env.CLUSTER_NAME }} with image $TASK_IMAGE"
           aws ecs update-service \
-            --cluster "$CLUSTER_NAME" \
-            --service "$SERVICE_NAME" \
+            --cluster "${{ env.CLUSTER_NAME }}" \
+            --service "${{ env.SERVICE_NAME }}" \
             --force-new-deployment \
             --region ${{ secrets.AWS_REGION }}
