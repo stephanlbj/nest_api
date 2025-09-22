@@ -91,11 +91,11 @@ jobs:
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-          # Extraction propre des outputs
-          ECR_REPO=$(terraform output -raw repository_url 2>/dev/null | grep -Eo '[0-9]+\.dkr\.ecr\..*\.amazonaws\.com/.*')
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null | grep -Eo 'arn:aws:ecs:[^ ]+')
-          SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null | grep -Eo '[a-zA-Z0-9\-_]+')
-          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image 2>/dev/null | grep -Eo '[0-9]+\.dkr\.ecr\..*\.amazonaws\.com/.*')
+          # Utilisation de awk pour garantir une sortie sur une seule ligne et sans espaces indésirables
+          ECR_REPO=$(terraform output -raw repository_url 2>/dev/null | tr -d '[:space:]')
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null | tr -d '[:space:]')
+          SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null | tr -d '[:space:]')
+          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image 2>/dev/null | tr -d '[:space:]')
 
           if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
             echo "❌ Terraform outputs are empty. Aborting."
