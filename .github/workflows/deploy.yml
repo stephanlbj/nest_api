@@ -90,14 +90,14 @@ jobs:
           terraform init -backend-config="env/backend.${{ env.ENV }}.tfvars"
           terraform apply -auto-approve -var-file="env/${{ env.ENV }}.tfvars"
 
-      # 1️⃣1️⃣ Get Terraform outputs
+      # 1️⃣1️⃣ Get Terraform outputs safely
       - name: Get Terraform outputs
         working-directory: terraform
         run: |
-          echo "ECR_REPO=$(terraform output -raw ecr_url)" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=$(terraform output -raw ecs_cluster_id)" >> $GITHUB_ENV
-          echo "SERVICE_NAME=$(terraform output -raw ecs_service_name)" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image)" >> $GITHUB_ENV
+          echo "ECR_REPO=\"$(terraform output -raw ecr_url)\"" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=\"$(terraform output -raw ecs_cluster_id)\"" >> $GITHUB_ENV
+          echo "SERVICE_NAME=\"$(terraform output -raw ecs_service_name)\"" >> $GITHUB_ENV
+          echo "TASK_DEF_IMAGE=\"$(terraform output -raw ecs_task_image)\"" >> $GITHUB_ENV
 
       # 1️⃣2️⃣ Build, tag, and push Docker image
       - name: Build, tag, and push image to ECR
@@ -117,7 +117,7 @@ jobs:
           TASK_IMAGE="${TASK_DEF_IMAGE:-$ECR_REPO:$ENV_TAG}"
           echo "🚀 Updating ECS service $SERVICE_NAME in cluster $CLUSTER_NAME with image $TASK_IMAGE"
           aws ecs update-service \
-            --cluster $CLUSTER_NAME \
-            --service $SERVICE_NAME \
+            --cluster "$CLUSTER_NAME" \
+            --service "$SERVICE_NAME" \
             --force-new-deployment \
             --region ${{ secrets.AWS_REGION }}
