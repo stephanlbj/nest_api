@@ -1,9 +1,5 @@
 name: Deploy NestJS App to ECS
 
-permissions:
-  id-token: write
-  contents: read
-
 on:
   push:
     branches:
@@ -45,18 +41,19 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # 5️⃣ Configure AWS credentials via OIDC
+      # 5️⃣ Configure AWS credentials (via secrets IAM)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::585665041354:role/GitHubActionsAppRole
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
       # 6️⃣ Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo (pour récupérer outputs  )
+      # 7️⃣ Checkout Terraform repo (pour récupérer outputs)
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
