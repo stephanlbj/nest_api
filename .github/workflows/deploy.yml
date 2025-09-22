@@ -67,7 +67,7 @@ jobs:
         with:
           terraform_version: 1.5.7
 
-      # 9️⃣ Terraform apply + clean outputs
+      # 9️⃣ Terraform apply + get clean outputs
       - name: Terraform apply and get outputs
         id: terraform-outputs
         working-directory: terraform
@@ -91,16 +91,17 @@ jobs:
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-          # Extraction propre des outputs ici
-          RAW_REPO=$(terraform output -raw repository_url)
-          echo "📝 Terraform raw repository_url: $RAW_REPO"
+          # Extraction propre des outputs via JSON pour éviter les annotations
+          ECR_REPO=$(terraform output -json repository_url | jq -r '.')
+          CLUSTER_NAME=$(terraform output -json ecs_cluster_id | jq -r '.')
+          SERVICE_NAME=$(terraform output -json ecs_service_name | jq -r '.')
+          TASK_DEF_IMAGE=$(terraform output -json ecs_task_image | jq -r '.')
 
-           
-
-          ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n' | xargs)
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n' | xargs)
-          SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n' | xargs)
-          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n' | xargs)
+          echo "📝 Terraform outputs:"
+          echo "ECR_REPO=$ECR_REPO"
+          echo "CLUSTER_NAME=$CLUSTER_NAME"
+          echo "SERVICE_NAME=$SERVICE_NAME"
+          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE"
 
           if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
             echo "❌ Terraform outputs are empty. Aborting."
