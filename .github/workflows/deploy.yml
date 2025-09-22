@@ -53,7 +53,7 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo (same branch as app)
+      # 7️⃣ Checkout Terraform repo (même branche que l'app)
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
@@ -67,7 +67,7 @@ jobs:
         with:
           terraform_version: 1.5.7
 
-      # 9️⃣ Terraform apply + outputs
+      # 9️⃣ Terraform apply + récupérer outputs
       - name: Terraform apply and get outputs
         id: terraform-outputs
         working-directory: terraform
@@ -92,19 +92,16 @@ jobs:
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
           # Récupération propre des outputs Terraform
-          # Supprime retours chariot, espaces et autres caractères invisibles
           ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n ' | xargs)
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n ' | xargs)
           SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n ' | xargs)
           TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n ' | xargs)
 
-          # Vérifier que les outputs sont valides
           if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
             echo "❌ Terraform outputs are empty. Aborting."
             exit 1
           fi
 
-          # Export vers GitHub Actions
           echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
           echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
@@ -112,9 +109,8 @@ jobs:
 
           echo "✅ Terraform outputs successfully retrieved."
 
-      # 🔟 Build, tag, and push Docker image + Deploy ECS
-      - name: Build, tag, and push Docker image + Deploy ECS
-        working-directory: .
+      # 🔟 Build, tag, push Docker image + déployer ECS
+      - name: Build, tag, push Docker image + Deploy ECS
         run: |
           set -euo pipefail
 
