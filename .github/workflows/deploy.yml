@@ -67,10 +67,13 @@ jobs:
         with:
           terraform_version: 1.5.7
 
-      # 9️⃣ Set environment
-      - name: Set environment
-        id: env-vars
+      # 9️⃣ Terraform apply + outputs + Docker build/push + ECS deploy
+      - name: Deploy Terraform + Docker + ECS
+        working-directory: terraform
         run: |
+          set -euo pipefail
+
+          # Déterminer l'environnement
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             ENV="${{ github.event.inputs.environment }}"
           else
@@ -83,24 +86,15 @@ jobs:
           fi
           echo "ENV=$ENV" >> $GITHUB_ENV
 
-      # 🔟 Terraform init & apply
-      - name: Terraform Apply
-        working-directory: terraform
-        run: |
-          set -euo pipefail
-          terraform init -backend-config="env/backend.${{ env.ENV }}.tfvars"
-          terraform apply -auto-approve -var-file="env/${{ env.ENV }}.tfvars"
+          # Terraform init & apply
+          terraform init -backend-config="env/backend.${ENV}.tfvars"
+          terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
-      # 1️⃣1️⃣ Get Terraform outputs safely
-      - name: Get Terraform outputs
-        working-directory: terraform
-        run: |
-          set -euo pipefail
-
-          ECR_REPO=$(terraform output -raw -no-color repository_url 2>/dev/null | tr -d '[:space:]')
-          CLUSTER_NAME=$(terraform output -raw -no-color ecs_cluster_id 2>/dev/null | tr -d '[:space:]')
-          SERVICE_NAME=$(terraform output -raw -no-color ecs_service_name 2>/dev/null | tr -d '[:space:]')
-          TASK_DEF_IMAGE=$(terraform output -raw -no-color ecs_task_image 2>/dev/null | tr -d '[:space:]')
+          # Récupération propre des outputs Terraform
+          ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n ')
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n ')
+          SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n ')
+          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n ')
 
           if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
             echo "❌ Terraform outputs are empty. Aborting."
@@ -112,12 +106,9 @@ jobs:
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
           echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE" >> $GITHUB_ENV
 
-          echo "✅ Terraform outputs successfully set in environment variables."
+          echo "✅ Terraform outputs successfully retrieved."
 
-      # 1️⃣2️⃣ Build, tag, and push Docker image
-      - name: Build, tag, and push image to ECR
-        run: |
-          set -euo pipefail
+          # Build, tag, and push Docker image
           IMAGE_TAG=$(git rev-parse --short HEAD)
           ENV_TAG="${ENV}-latest"
           echo "🐳 Building Docker image for $ENV..."
@@ -127,10 +118,7 @@ jobs:
           docker push "$ECR_REPO:$IMAGE_TAG"
           docker push "$ECR_REPO:$ENV_TAG"
 
-      # 1️⃣3️⃣ Deploy ECS service with new image
-      - name: Deploy to ECS
-        run: |
-          set -euo pipefail
+          # Deploy ECS service
           TASK_IMAGE="${TASK_DEF_IMAGE:-$ECR_REPO:$ENV_TAG}"
           echo "🚀 Updating ECS service $SERVICE_NAME in cluster $CLUSTER_NAME with image $TASK_IMAGE"
           aws ecs update-service \
