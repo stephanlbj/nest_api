@@ -1,9 +1,5 @@
 name: Deploy NestJS App to ECS
 
-permissions:
-  id-token: write
-  contents: read
-
 on:
   push:
     branches:
@@ -45,67 +41,32 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # 5️⃣ Configure AWS credentials via OIDC
+      # 5️⃣ Configure AWS credentials via IAM secrets
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::585665041354:role/GitHubActionsAppRole
-          aws-region: eu-north-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       # 6️⃣ Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo (pour récupérer outputs)
-      - name: Checkout Terraform repo
-        uses: actions/checkout@v4
-        with:
-          repository: stephanlbj/terraformdeploy1
-          path: terraform
-          ref: ${{ github.ref_name }}
-
-      # 8️⃣ Setup Terraform
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
-
-      # 9️⃣ Get Terraform outputs (no apply)
-      - name: Get Terraform outputs
-        id: terraform-outputs
-        working-directory: terraform
-        run: |
-          set -euo pipefail
-          ENV="${{ github.event.inputs.environment }}"
-          if [ -z "$ENV" ]; then
-            echo "❌ Environment input is empty. Aborting."
-            exit 1
-          fi
-          echo "ENV=${ENV}" >> $GITHUB_ENV
-
-          terraform init -backend-config="env/backend.${ENV}.tfvars"
-
-          # Récupérer les outputs
-          ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n')
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n')
-          SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n')
-          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n')
-
-          echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
-          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=${TASK_DEF_IMAGE}" >> $GITHUB_ENV
-
-      # 🔟 Build, tag, push Docker image + Deploy ECS
+      # 7️⃣ Build, tag, push Docker image + Deploy ECS
       - name: Build, tag, push Docker image + Deploy ECS
         run: |
           set -euo pipefail
+
+          ENV="${{ github.event.inputs.environment }}"
           IMAGE_TAG=$(git rev-parse --short HEAD)
-          ENV_TAG="${{ env.ENV }}-latest"
-          REPO="${{ env.ECR_REPO }}"
-          CLUSTER="${{ env.CLUSTER_NAME }}"
-          SERVICE="${{ env.SERVICE_NAME }}"
-          TASK_IMAGE="${{ env.TASK_DEF_IMAGE }}"
+          ENV_TAG="${ENV}-latest"
+
+          # URL ECR en dur pour test
+          REPO="585665041354.dkr.ecr.eu-north-1.amazonaws.com/nest-api-staging-repo"
+          CLUSTER="nest-api-cluster"       # Remplace par ton cluster ECS
+          SERVICE="nest-api-service"       # Remplace par ton service ECS
+          TASK_IMAGE=""                    # Laisse vide pour utiliser l'image qu'on push
 
           echo "🐳 Building Docker image..."
           docker build -t "${REPO}:${IMAGE_TAG}" .
@@ -115,11 +76,11 @@ jobs:
           docker push "${REPO}:${IMAGE_TAG}"
           docker push "${REPO}:${ENV_TAG}"
 
-          # Si Terraform a déjà fourni une image, l’utiliser, sinon celle qu’on vient de push
+          # Déploiement ECS
           DEPLOY_IMAGE="${TASK_IMAGE:-${REPO}:${ENV_TAG}}"
           echo "🚀 Updating ECS service $SERVICE in cluster $CLUSTER with image $DEPLOY_IMAGE"
           aws ecs update-service \
             --cluster "$CLUSTER" \
             --service "$SERVICE" \
             --force-new-deployment \
-            --region eu-north-1
+            --region ${{ secrets.AWS_REGION }}
