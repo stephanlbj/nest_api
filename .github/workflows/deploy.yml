@@ -95,6 +95,7 @@ jobs:
         working-directory: terraform
         run: |
           set -e
+
           ECR_REPO=$(terraform output -raw ecr_url 2>/dev/null || echo "")
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id 2>/dev/null || echo "")
           SERVICE_NAME=$(terraform output -raw ecs_service_name 2>/dev/null || echo "")
@@ -105,10 +106,18 @@ jobs:
             exit 1
           fi
 
-          echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
-          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE" >> $GITHUB_ENV
+          # Supprime les retours à la ligne et caractères spéciaux avant d'écrire dans GITHUB_ENV
+          ECR_REPO_SAFE="${ECR_REPO//$'\n'/}"
+          CLUSTER_NAME_SAFE="${CLUSTER_NAME//$'\n'/}"
+          SERVICE_NAME_SAFE="${SERVICE_NAME//$'\n'/}"
+          TASK_DEF_IMAGE_SAFE="${TASK_DEF_IMAGE//$'\n'/}"
+
+          echo "ECR_REPO=$ECR_REPO_SAFE" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=$CLUSTER_NAME_SAFE" >> $GITHUB_ENV
+          echo "SERVICE_NAME=$SERVICE_NAME_SAFE" >> $GITHUB_ENV
+          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE_SAFE" >> $GITHUB_ENV
+
+          echo "✅ Terraform outputs successfully set in environment variables."
 
       # 1️⃣2️⃣ Build, tag, and push Docker image
       - name: Build, tag, and push image to ECR
