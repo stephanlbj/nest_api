@@ -67,8 +67,9 @@ jobs:
         with:
           terraform_version: 1.5.7
 
-      # 9️⃣ Terraform apply + outputs + Docker build/push + ECS deploy
-      - name: Deploy Terraform + Docker + ECS
+      # 9️⃣ Terraform apply + outputs
+      - name: Terraform apply and get outputs
+        id: terraform-outputs
         working-directory: terraform
         run: |
           set -euo pipefail
@@ -84,39 +85,45 @@ jobs:
               *) ENV="staging" ;;
             esac
           fi
-          echo "ENV=$ENV" >> $GITHUB_ENV
+          echo "ENV=${ENV}" >> $GITHUB_ENV
 
           # Terraform init & apply
           terraform init -backend-config="env/backend.${ENV}.tfvars"
           terraform apply -auto-approve -var-file="env/${ENV}.tfvars"
 
           # Récupération propre des outputs Terraform
-          ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n ')
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n ')
-          SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n ')
-          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image | tr -d '\r\n ')
+          ECR_REPO=$(terraform output -raw repository_url)
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_id)
+          SERVICE_NAME=$(terraform output -raw ecs_service_name)
+          TASK_DEF_IMAGE=$(terraform output -raw ecs_task_image)
 
-          if [ -z "$ECR_REPO" ] || [ -z "$CLUSTER_NAME" ] || [ -z "$SERVICE_NAME" ]; then
-            echo "❌ Terraform outputs are empty. Aborting."
-            exit 1
-          fi
-
-          echo "ECR_REPO=$ECR_REPO" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
-          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-          echo "TASK_DEF_IMAGE=$TASK_DEF_IMAGE" >> $GITHUB_ENV
+          echo "ECR_REPO=${ECR_REPO}" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
+          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
+          echo "TASK_DEF_IMAGE=${TASK_DEF_IMAGE}" >> $GITHUB_ENV
 
           echo "✅ Terraform outputs successfully retrieved."
 
-          # Build, tag, and push Docker image
+      # 🔟 Build, tag, and push Docker image + Deploy ECS
+      - name: Build, tag, and push Docker image + Deploy ECS
+        working-directory: .
+        run: |
+          set -euo pipefail
+
+          # Accéder aux variables d'environnement définies à l'étape précédente
           IMAGE_TAG=$(git rev-parse --short HEAD)
-          ENV_TAG="${ENV}-latest"
-          echo "🐳 Building Docker image for $ENV..."
-          docker build -t "$ECR_REPO:$IMAGE_TAG" .
-          docker tag "$ECR_REPO:$IMAGE_TAG" "$ECR_REPO:$ENV_TAG"
+          ENV_TAG="${{ env.ENV }}-latest"
+          ECR_REPO="${{ env.ECR_REPO }}"
+          CLUSTER_NAME="${{ env.CLUSTER_NAME }}"
+          SERVICE_NAME="${{ env.SERVICE_NAME }}"
+          TASK_DEF_IMAGE="${{ env.TASK_DEF_IMAGE }}"
+
+          echo "🐳 Building Docker image for ${{ env.ENV }}..."
+          docker build -t "${ECR_REPO}:${IMAGE_TAG}" .
+          docker tag "${ECR_REPO}:${IMAGE_TAG}" "${ECR_REPO}:${ENV_TAG}"
           echo "📤 Pushing to ECR..."
-          docker push "$ECR_REPO:$IMAGE_TAG"
-          docker push "$ECR_REPO:$ENV_TAG"
+          docker push "${ECR_REPO}:${IMAGE_TAG}"
+          docker push "${ECR_REPO}:${ENV_TAG}"
 
           # Deploy ECS service
           TASK_IMAGE="${TASK_DEF_IMAGE:-$ECR_REPO:$ENV_TAG}"
