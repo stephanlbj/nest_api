@@ -49,14 +49,14 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{secrets.AWS_GITHUB_ROLE_ARN}}
+          role-to-assume: arn:aws:iam::585665041354:role/GitHubActionsAppRole
           aws-region: ${{ secrets.AWS_REGION }}
 
       # 6️⃣ Login to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 7️⃣ Checkout Terraform repo (pour récupérer outputs )
+      # 7️⃣ Checkout Terraform repo (pour récupérer outputs  )
       - name: Checkout Terraform repo
         uses: actions/checkout@v4
         with:
