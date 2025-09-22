@@ -41,11 +41,11 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # 5️⃣ Configure AWS credentials via OIDC (pas de secrets stockés)
+      # 5️⃣ Configure AWS credentials via OIDC
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
+          role-to-assume: ${{secrets.AWS_GITHUB_ROLE_ARN}}
           aws-region: ${{ secrets.AWS_REGION }}
 
       # 6️⃣ Login to Amazon ECR
@@ -60,7 +60,7 @@ jobs:
           path: terraform
           ref: ${{ github.ref_name }}
 
-      # 8️⃣ Extract Terraform outputs (no apply)
+      # 8️⃣ Get Terraform outputs (no apply)
       - name: Get Terraform outputs
         id: terraform-outputs
         working-directory: terraform
@@ -69,8 +69,9 @@ jobs:
           ENV="${{ github.event.inputs.environment }}"
           echo "ENV=${ENV}" >> $GITHUB_ENV
 
-          # Terraform init + outputs
           terraform init -backend-config="env/backend.${ENV}.tfvars"
+
+          # Récupérer les outputs
           ECR_REPO=$(terraform output -raw repository_url | tr -d '\r\n')
           CLUSTER_NAME=$(terraform output -raw ecs_cluster_id | tr -d '\r\n')
           SERVICE_NAME=$(terraform output -raw ecs_service_name | tr -d '\r\n')
@@ -85,27 +86,27 @@ jobs:
       - name: Build, tag, push Docker image + Deploy ECS
         run: |
           set -euo pipefail
+
           IMAGE_TAG=$(git rev-parse --short HEAD)
-          ENV_TAG="${ENV}-latest"
+          ENV_TAG="${{ env.ENV }}-latest"
+          REPO="${{ env.ECR_REPO }}"
+          CLUSTER="${{ env.CLUSTER_NAME }}"
+          SERVICE="${{ env.SERVICE_NAME }}"
+          TASK_IMAGE="${{ env.TASK_DEF_IMAGE }}"
 
           echo "🐳 Building Docker image..."
-          docker build -t "${ECR_REPO}:${IMAGE_TAG}" .
-          docker tag "${ECR_REPO}:${IMAGE_TAG}" "${ECR_REPO}:${ENV_TAG}"
+          docker build -t "${REPO}:${IMAGE_TAG}" .
+          docker tag "${REPO}:${IMAGE_TAG}" "${REPO}:${ENV_TAG}"
 
           echo "📤 Pushing Docker image to ECR..."
-          docker push "${ECR_REPO}:${IMAGE_TAG}"
-          docker push "${ECR_REPO}:${ENV_TAG}"
+          docker push "${REPO}:${IMAGE_TAG}"
+          docker push "${REPO}:${ENV_TAG}"
 
-          # Déterminer l'image à déployer (utilise TASK_DEF_IMAGE si présent, sinon ECR_TAG)
-          if [ -z "$TASK_DEF_IMAGE" ]; then
-            TASK_IMAGE="${ECR_REPO}:${ENV_TAG}"
-          else
-            TASK_IMAGE="$TASK_DEF_IMAGE"
-          fi
-
-          echo "🚀 Updating ECS service $SERVICE_NAME in cluster $CLUSTER_NAME with image $TASK_IMAGE"
+          # Si Terraform a déjà fourni une image, l’utiliser, sinon utiliser celle qu’on vient de push
+          DEPLOY_IMAGE="${TASK_IMAGE:-${REPO}:${ENV_TAG}}"
+          echo "🚀 Updating ECS service $SERVICE in cluster $CLUSTER with image $DEPLOY_IMAGE"
           aws ecs update-service \
-            --cluster "$CLUSTER_NAME" \
-            --service "$SERVICE_NAME" \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
             --force-new-deployment \
             --region ${{ secrets.AWS_REGION }}
